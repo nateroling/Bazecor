@@ -77,3 +77,22 @@ export const serializeSuperkeys = (superkeys: SuperkeysType[]) => {
   log.info("Mapped superkeys: ", mapped, keyMap);
   return mapped;
 };
+
+/**
+ * Parses the reply to `superkeys.holdOnOtherKey` (custom firmware only): one
+ * 0/1 per Superkey slot. Returns undefined when the firmware doesn't have the
+ * command, which it shows by answering with an empty string.
+ */
+export const parseHoldOnOtherKeyRaw = (raw: unknown): boolean[] | undefined => {
+  if (typeof raw !== "string") return undefined;
+  const values = raw
+    .trim()
+    .split(/\s+/)
+    .filter(v => v.length > 0);
+  if (values.length === 0 || values.some(v => v !== "0" && v !== "1")) return undefined;
+  return values.map(v => v === "1");
+};
+
+/** One 0/1 per Superkey, in slot order, for `superkeys.holdOnOtherKey`. */
+export const serializeHoldOnOtherKey = (superkeys: SuperkeysType[]) =>
+  superkeys.map(sk => (sk.holdOnOtherKey === false ? "0" : "1")).join(" ");

@@ -369,6 +369,11 @@ const English = {
     },
     superkeys: {
       add: "Add new superkey",
+      holdOnOtherKey: "Hold on other key press",
+      holdOnOtherKeyTip1:
+        "When on, this Superkey takes its Hold action as soon as you press another key while holding it. When off, the other key has to be released first, or the Hold Timeout has to pass.",
+      holdOnOtherKeyTip2:
+        "Only affects Superkeys that have just Tap and Hold, with a Modifier or Layer on Hold. Minimum Hold Time and Minimum Prior Interval still apply.",
       applyAndExit: "Apply",
       saveName: "Save name",
       backup: "Backup All",
