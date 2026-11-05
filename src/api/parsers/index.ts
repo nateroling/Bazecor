@@ -3,7 +3,15 @@ import { parseKeymapRaw, serializeKeymap } from "./keymap";
 import { parsePaletteRaw } from "./palette";
 import { parseColormapRaw } from "./colormap";
 import { parseMacrosRaw, serializeMacros } from "./macros";
-import { parseSuperkeysRaw, serializeSuperkeys } from "./superkeys";
+import {
+  parseSuperkeysRaw,
+  serializeSuperkeys,
+  parseHoldOnOtherKeyRaw,
+  serializeHoldOnOtherKey,
+  holdOnOtherKeyGroup,
+  holdOnOtherKeyTwins,
+  effectiveHoldOnOtherKey,
+} from "./superkeys";
 import {
   parseCombosRaw,
   serializeCombos,
@@ -46,6 +54,11 @@ export {
   serializeMacros,
   parseSuperkeysRaw,
   serializeSuperkeys,
+  parseHoldOnOtherKeyRaw,
+  serializeHoldOnOtherKey,
+  holdOnOtherKeyGroup,
+  holdOnOtherKeyTwins,
+  effectiveHoldOnOtherKey,
   parseCombosRaw,
   serializeCombos,
   emptyCombo,

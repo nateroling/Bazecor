@@ -22,6 +22,8 @@ export interface SuperkeysType {
   name: string;
   id: number;
   superkey?: string;
+  /** Hold on other key press (custom firmware only). Undefined is treated as on. */
+  holdOnOtherKey?: boolean;
 }
 
 export interface SuperKeyActionsProps {

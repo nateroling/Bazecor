@@ -32,7 +32,9 @@ import SuperkeysSelector from "@Renderer/components/organisms/Select/SuperkeysSe
 import { Button } from "@Renderer/components/atoms/Button";
 import LogoLoader from "@Renderer/components/atoms/loader/LogoLoader";
 import ToastMessage from "@Renderer/components/atoms/ToastMessage";
-import { IconFloppyDisk } from "@Renderer/components/atoms/icons";
+import { IconFloppyDisk, IconInformation } from "@Renderer/components/atoms/icons";
+import { Switch } from "@Renderer/components/atoms/Switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@Renderer/components/atoms/Tooltip";
 
 // Modules
 import { PageHeader } from "@Renderer/modules/PageHeader";
@@ -53,7 +55,16 @@ import Store from "@Renderer/utils/Store";
 import getLanguage from "@Renderer/utils/language";
 import Keymap, { KeymapDB } from "../../api/keymap";
 import Backup from "../../api/backup";
-import { parseMacrosRaw, parseSuperkeysRaw, serializeKeymap, serializeSuperkeys } from "../../api/parsers";
+import {
+  effectiveHoldOnOtherKey,
+  holdOnOtherKeyTwins,
+  parseHoldOnOtherKeyRaw,
+  parseMacrosRaw,
+  parseSuperkeysRaw,
+  serializeHoldOnOtherKey,
+  serializeKeymap,
+  serializeSuperkeys,
+} from "../../api/parsers";
 
 const store = Store.getStore();
 
@@ -116,6 +127,7 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
     futureSSK: 0,
     currentLanguageLayout: getLanguage(store.get("settings.language") as string),
     showStandardView: false,
+    holdOnOtherKeySupported: false,
     loading: true,
   };
   const [state, setState] = useState(initialState);
@@ -203,6 +215,17 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
       const parsedMacros = parseMacrosRaw(macrosRaw, state.storedMacros);
       const supersRaw = await currentDevice.command("superkeys.map");
       const parsedSuper = parseSuperkeysRaw(supersRaw, state.storedSuper);
+      // Per-Superkey hold on other key press: only custom firmware has this
+      // command; stock firmware answers with an empty string.
+      const holdOnOtherKeyRaw = await currentDevice.command("superkeys.holdOnOtherKey");
+      const holdOnOtherKey = parseHoldOnOtherKeyRaw(holdOnOtherKeyRaw);
+      state.holdOnOtherKeySupported = holdOnOtherKey !== undefined;
+      if (holdOnOtherKey) {
+        parsedSuper.forEach((sk, i) => {
+          // eslint-disable-next-line no-param-reassign
+          sk.holdOnOtherKey = holdOnOtherKey[i] !== false;
+        });
+      }
       state.modified = false;
       state.macros = parsedMacros;
       state.superkeys = parsedSuper;
@@ -268,6 +291,40 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
     startContext();
   };
 
+  const superkeyLabel = (superkeys: SuperkeysType[], index: number) =>
+    superkeys[index]?.name ? superkeys[index].name : `Superkey ${index + 1}`;
+
+  // Superkeys with the same Tap and Hold become the same key on the keyboard,
+  // so they share this setting: change them together and say so.
+  const setHoldOnOtherKey = (checked: boolean) => {
+    const { startContext } = props;
+    const { superkeys, selectedSuper } = state;
+    if (superkeys[selectedSuper] === undefined) return;
+    const twins = holdOnOtherKeyTwins(superkeys, selectedSuper);
+    const changed = twins.length > 0 ? twins : [selectedSuper];
+    changed.forEach(i => {
+      superkeys[i].holdOnOtherKey = checked;
+    });
+    state.superkeys = superkeys;
+    state.modified = true;
+    setState({ ...state });
+    startContext();
+    const others = changed.filter(i => i !== selectedSuper);
+    if (others.length > 0) {
+      toast.info(
+        <ToastMessage
+          title={i18n.editor.superkeys.holdOnOtherKeySyncedTitle}
+          content={i18n.editor.superkeys.holdOnOtherKeySynced.replace(
+            "{names}",
+            others.map(i => superkeyLabel(superkeys, i)).join(", "),
+          )}
+          icon={<IconInformation />}
+        />,
+        { autoClose: 4000, icon: "" },
+      );
+    }
+  };
+
   const saveName = (name: string) => {
     const { startContext } = props;
     const { superkeys, selectedSuper } = state;
@@ -293,6 +350,9 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
       // Send superkeys map first (Superkeys Editor requirement)
       const sendSK = serializeSuperkeys(superkeys);
       await currentDevice.command("superkeys.map", sendSK);
+      if (state.holdOnOtherKeySupported) {
+        await currentDevice.command("superkeys.holdOnOtherKey", serializeHoldOnOtherKey(superkeys));
+      }
       // Then match LayoutEditor.onApply keymap save path (force send without cache)
       if (keymap && keymap.custom) {
         await currentDevice?.noCacheCommand("keymap.custom", serializeKeymap(keymap.custom));
@@ -529,7 +589,12 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
     modified,
     showDeleteModal,
     loading,
+    holdOnOtherKeySupported,
   } = state;
+
+  const holdOnOtherKeyTwinIdx = holdOnOtherKeyTwins(superkeys, selectedSuper);
+  const holdOnOtherKeyApplies = holdOnOtherKeyTwinIdx.length > 0;
+  const holdOnOtherKeyTwinNames = holdOnOtherKeyTwinIdx.filter(i => i !== selectedSuper).map(i => superkeyLabel(superkeys, i));
 
   const tempKC = superkeys[selectedSuper] !== undefined ? superkeys[selectedSuper].actions[selectedAction] : -1;
   const tempkey = tempKC === -1 ? keymapDB.parse(0) : keymapDB.parse(tempKC);
@@ -587,6 +652,47 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
           changeAction={changeAction}
           keymapDB={keymapDB}
         />
+
+        {holdOnOtherKeySupported && superkeys[selectedSuper] !== undefined && (
+          <div className="mt-4 max-w-xl">
+            <div className="flex items-center justify-between gap-4">
+              <Heading
+                headingLevel={3}
+                renderAs="paragraph-sm"
+                className={`flex items-center gap-2 ${holdOnOtherKeyApplies ? "" : "opacity-50"}`}
+              >
+                {i18n.editor.superkeys.holdOnOtherKey}
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger className="[&_svg]:text-purple-100 [&_svg]:dark:text-purple-200">
+                      <IconInformation />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="mb-2">{i18n.editor.superkeys.holdOnOtherKeyTip1}</p>
+                      <p>{i18n.editor.superkeys.holdOnOtherKeyTip2}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Heading>
+              <Switch
+                id="SuperkeyHoldOnOtherKeySwitch"
+                checked={effectiveHoldOnOtherKey(superkeys, selectedSuper)}
+                onCheckedChange={setHoldOnOtherKey}
+                disabled={!holdOnOtherKeyApplies}
+                variant="default"
+                size="sm"
+              />
+            </div>
+            {!holdOnOtherKeyApplies && (
+              <p className="text-ssm text-gray-400 dark:text-gray-200 mt-1">{i18n.editor.superkeys.holdOnOtherKeyUnavailable}</p>
+            )}
+            {holdOnOtherKeyTwinNames.length > 0 && (
+              <p className="text-ssm text-gray-400 dark:text-gray-200 mt-1">
+                {i18n.editor.superkeys.holdOnOtherKeyShared.replace("{names}", holdOnOtherKeyTwinNames.join(", "))}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="keyboardcontainer" hidden={selectedAction < 0}>

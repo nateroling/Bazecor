@@ -48,6 +48,8 @@ export interface SuperkeysEditorInitialStateType {
   currentLanguageLayout: string;
 
   showStandardView: boolean;
+  /** The firmware has superkeys.holdOnOtherKey (custom firmware only). */
+  holdOnOtherKeySupported: boolean;
   loading: boolean;
 }
 
