@@ -56,6 +56,8 @@ import getLanguage from "@Renderer/utils/language";
 import Keymap, { KeymapDB } from "../../api/keymap";
 import Backup from "../../api/backup";
 import {
+  effectiveHoldOnOtherKey,
+  holdOnOtherKeyTwins,
   parseHoldOnOtherKeyRaw,
   parseMacrosRaw,
   parseSuperkeysRaw,
@@ -289,15 +291,38 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
     startContext();
   };
 
+  const superkeyLabel = (superkeys: SuperkeysType[], index: number) =>
+    superkeys[index]?.name ? superkeys[index].name : `Superkey ${index + 1}`;
+
+  // Superkeys with the same Tap and Hold become the same key on the keyboard,
+  // so they share this setting: change them together and say so.
   const setHoldOnOtherKey = (checked: boolean) => {
     const { startContext } = props;
     const { superkeys, selectedSuper } = state;
     if (superkeys[selectedSuper] === undefined) return;
-    superkeys[selectedSuper].holdOnOtherKey = checked;
+    const twins = holdOnOtherKeyTwins(superkeys, selectedSuper);
+    const changed = twins.length > 0 ? twins : [selectedSuper];
+    changed.forEach(i => {
+      superkeys[i].holdOnOtherKey = checked;
+    });
     state.superkeys = superkeys;
     state.modified = true;
     setState({ ...state });
     startContext();
+    const others = changed.filter(i => i !== selectedSuper);
+    if (others.length > 0) {
+      toast.info(
+        <ToastMessage
+          title={i18n.editor.superkeys.holdOnOtherKeySyncedTitle}
+          content={i18n.editor.superkeys.holdOnOtherKeySynced.replace(
+            "{names}",
+            others.map(i => superkeyLabel(superkeys, i)).join(", "),
+          )}
+          icon={<IconInformation />}
+        />,
+        { autoClose: 4000, icon: "" },
+      );
+    }
   };
 
   const saveName = (name: string) => {
@@ -567,6 +592,10 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
     holdOnOtherKeySupported,
   } = state;
 
+  const holdOnOtherKeyTwinIdx = holdOnOtherKeyTwins(superkeys, selectedSuper);
+  const holdOnOtherKeyApplies = holdOnOtherKeyTwinIdx.length > 0;
+  const holdOnOtherKeyTwinNames = holdOnOtherKeyTwinIdx.filter(i => i !== selectedSuper).map(i => superkeyLabel(superkeys, i));
+
   const tempKC = superkeys[selectedSuper] !== undefined ? superkeys[selectedSuper].actions[selectedAction] : -1;
   const tempkey = tempKC === -1 ? keymapDB.parse(0) : keymapDB.parse(tempKC);
   const code = keymapDB.keySegmentor(tempkey.keyCode);
@@ -625,28 +654,43 @@ function SuperkeysEditor(props: SuperkeysEditorProps) {
         />
 
         {holdOnOtherKeySupported && superkeys[selectedSuper] !== undefined && (
-          <div className="flex items-center justify-between gap-4 mt-4 max-w-xl">
-            <Heading headingLevel={3} renderAs="paragraph-sm" className="flex items-center gap-2">
-              {i18n.editor.superkeys.holdOnOtherKey}
-              <TooltipProvider delayDuration={200}>
-                <Tooltip>
-                  <TooltipTrigger className="[&_svg]:text-purple-100 [&_svg]:dark:text-purple-200">
-                    <IconInformation />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="mb-2">{i18n.editor.superkeys.holdOnOtherKeyTip1}</p>
-                    <p>{i18n.editor.superkeys.holdOnOtherKeyTip2}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </Heading>
-            <Switch
-              id="SuperkeyHoldOnOtherKeySwitch"
-              checked={superkeys[selectedSuper].holdOnOtherKey !== false}
-              onCheckedChange={setHoldOnOtherKey}
-              variant="default"
-              size="sm"
-            />
+          <div className="mt-4 max-w-xl">
+            <div className="flex items-center justify-between gap-4">
+              <Heading
+                headingLevel={3}
+                renderAs="paragraph-sm"
+                className={`flex items-center gap-2 ${holdOnOtherKeyApplies ? "" : "opacity-50"}`}
+              >
+                {i18n.editor.superkeys.holdOnOtherKey}
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger className="[&_svg]:text-purple-100 [&_svg]:dark:text-purple-200">
+                      <IconInformation />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="mb-2">{i18n.editor.superkeys.holdOnOtherKeyTip1}</p>
+                      <p>{i18n.editor.superkeys.holdOnOtherKeyTip2}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Heading>
+              <Switch
+                id="SuperkeyHoldOnOtherKeySwitch"
+                checked={effectiveHoldOnOtherKey(superkeys, selectedSuper)}
+                onCheckedChange={setHoldOnOtherKey}
+                disabled={!holdOnOtherKeyApplies}
+                variant="default"
+                size="sm"
+              />
+            </div>
+            {!holdOnOtherKeyApplies && (
+              <p className="text-ssm text-gray-400 dark:text-gray-200 mt-1">{i18n.editor.superkeys.holdOnOtherKeyUnavailable}</p>
+            )}
+            {holdOnOtherKeyTwinNames.length > 0 && (
+              <p className="text-ssm text-gray-400 dark:text-gray-200 mt-1">
+                {i18n.editor.superkeys.holdOnOtherKeyShared.replace("{names}", holdOnOtherKeyTwinNames.join(", "))}
+              </p>
+            )}
           </div>
         )}
       </div>
